@@ -7,39 +7,45 @@ FULL_WIN_VSCC_DIFF: int = 25
 
 ratings: dict[str, int] = {}
 
+
 class Player:
     def __init__(self, name: str, vscc_percent: int, k: int):
         self.name = name
         self.vscc_percent = vscc_percent
         self.k = k
 
+
 class Modification:
     def __init__(self, modifications: dict[str, int], timestamp: int, vscc_results: list[Player] = []):
         self.modifications: dict[str, int] = modifications
         self.application_time: int = timestamp
-        self.vscc_results = { p.name: p.vscc_percent for p in vscc_results } if len(vscc_results) > 0 else None
-    
+        self.vscc_results = {p.name: p.vscc_percent for p in vscc_results} if len(vscc_results) > 0 else None
+
     def apply(self):
         for player, score_change in self.modifications.items():
+            if not ratings.__contains__(player):
+                ratings[player] = DEFAULT_RATING
             ratings[player] += score_change
 
-    def log(self, path: str):
-        with open(path, "w") as f:
+    def log(self, log_path: str):
+        with open(log_path, "w") as f:
             if self.vscc_results is not None:
                 for player, score_change in self.modifications.items():
                     f.write(f"{player:16}{ratings[player]:4} -> {ratings[player]+score_change:4} ({score_change:+d}) [vscc% {self.vscc_results[player]}]")
             else:
                 for player, score_change in self.modifications.items():
                     f.write(f"{player:16}{ratings[player]:4} -> {ratings[player]+score_change:4} ({score_change:+d})")
-    
-    def log_apply(self, path: str):
-        self.log()
+
+    def log_apply(self, log_path: str):
+        self.log(log_path)
         self.apply()
+
 
 def outcome(vscc_1: int | float, vscc_2: int | float) -> float:
     return ((max(-FULL_WIN_VSCC_DIFF, min(vscc_1 - vscc_2, FULL_WIN_VSCC_DIFF))
-        + FULL_WIN_VSCC_DIFF)
-        / (FULL_WIN_VSCC_DIFF * 2))
+            + FULL_WIN_VSCC_DIFF)
+            / (FULL_WIN_VSCC_DIFF * 2))
+
 
 class Game:
     def __init__(self, start_t: float, end_t: float, victor_count: int, results: list[(str, int)], name: str):
@@ -53,29 +59,31 @@ class Game:
         for i, (player, vscc_percent) in enumerate(results_copy):
             k = 35 + ((25 / self.victor_count) if i < self.victor_count else 0)
             self.results.append(Player(player, vscc_percent, k))
-    
-    def score(self, ratings: dict[str, int]) -> Modification:
+
+    def score(self, ratings_ref: dict[str, int]) -> Modification:
         modifications: dict[str, int] = {}
         for p1, p2 in itertools.combinations(self.results, 2):
-            if p1.name not in ratings:
-                ratings[p1.name] = DEFAULT_RATING
-            if p2.name not in ratings:
-                ratings[p2.name] = DEFAULT_RATING
+            if p1.name not in ratings_ref:
+                ratings_ref[p1.name] = DEFAULT_RATING
+            if p2.name not in ratings_ref:
+                ratings_ref[p2.name] = DEFAULT_RATING
             if p1.name not in modifications:
                 modifications[p1.name] = 0
             if p2.name not in modifications:
                 modifications[p2.name] = 0
-            
-            expected = expected_outcome(ratings[p1.name] - ratings[p2.name])
+
+            expected = expected_outcome(ratings_ref[p1.name] - ratings_ref[p2.name])
             actual = outcome(p1.vscc_percent, p2.vscc_percent)
             difference = expected - actual
             modifications[p1.name] += difference * p1.k
             modifications[p2.name] -= difference * p2.k
         return Modification(modifications, self.end_t)
 
+
 def error(message: str) -> Never:
     print(message)
     exit(1)
+
 
 def expected_outcome(diff: int | float) -> float:
     return 1 / (1 + 2 ** (-diff/1000))
@@ -119,7 +127,7 @@ for path in game_files:
                 error("Error: file {path} line #{line_count} had the wrong format. "
                       "Each line after the header should contain the original player discord tag, "
                       "final player discord tag, and vscc%, in that order, with tabs between them.")
-            
+
             original_player, score = parts
             for o_p, _ in vsccs:
                 if o_p == original_player:
@@ -135,7 +143,7 @@ for path in game_files:
         print("Warning: file {path} contained information for less than 24 or over 25 players. "
               "Imperial diplomacy has 24-25 players (depending on the wave), so this seems likely"
               "to be a mistake.")
-    games.append(Game(start_t, end_t, victor_count, vsccs, "".join(path.split('.')[:-1])))    
+    games.append(Game(start_t, end_t, victor_count, vsccs, "".join(path.split('.')[:-1])))
 
 modifications_stack: list[(Modification, str)] = []
 the_time: int = -1
@@ -154,8 +162,8 @@ while True:
             to_append = game.score(ratings), game.name
             modifications_stack.append(to_append)
         else:
-            break # `games` is sorted by `start_t`
-    
+            break  # `games` is sorted by `start_t`
+
     if len(games) == 0:
         for modification, output_file in modifications_stack:
             modification.log_apply(output_file)

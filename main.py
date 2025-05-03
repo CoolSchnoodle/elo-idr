@@ -3,7 +3,7 @@ import itertools
 from typing import Never
 
 DEFAULT_RATING: float = 1000.0
-FULL_WIN_VSCC_DIFF: float = 25.0
+FULL_WIN_VSCC_DIFF: float = 50.0
 
 ratings: dict[str, float] = {}
 
